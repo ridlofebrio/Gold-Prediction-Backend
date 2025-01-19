@@ -63,7 +63,3 @@ Setelah menjalankan server, Anda dapat mengakses:
 - Pandas
 - Scikit-learn
 - NumPy
-
-## Lisensi
-
-[Tambahkan informasi lisensi di sini]
