@@ -15,7 +15,7 @@ model = load_model("Model/LSTM.h5")
 
 router = APIRouter()
 
-CSV_FILE_PATH = "Database/train.csv"
+CSV_FILE_PATH = "Database/DataTrain.csv"
 
 def prepare_data():
     try:
@@ -72,22 +72,16 @@ async def predict_price():
         
         # Check if dataset is large enough
         if len(scaled_data) < window_size:
-            return JSONResponse(
+            raise HTTPException(
                 status_code=400,
-                content={
-                    "status": {
-                        "code": 400,
-                        "message": f"Not enough data to form a sequence of size {window_size}. Dataset size: {len(scaled_data)}."
-                    },
-                    "data": None
-                }
+                detail=f"Not enough data to form a sequence of size {window_size}. Dataset size: {len(scaled_data)}."
             )
         
         # Prepare the last sequence for prediction
         last_sequence = scaled_data[-window_size:]
         
-        # Generate predictions for the next 30 days
-        predictions = predict_next_n_days(model, last_sequence, scaler, n_days=30)
+        # Generate predictions for the next 7 days
+        predictions = predict_next_n_days(model, last_sequence, scaler)
         
         # Create dates for the predictions
         last_date = df['Tanggal'].iloc[-1]
@@ -97,51 +91,20 @@ async def predict_price():
         prediction_results = []
         for date, price in zip(future_dates, predictions.flatten()):
             prediction_results.append({
-                "date": date.strftime("%Y-%m-%d"),
-                "predicted_price": round(float(price), 2)
+                "tanggal": date.strftime("%Y-%m-%d"),
+                "prediksi_harga": round(float(price), 2)
             })
         
-        # Return results with proper structure
-        return JSONResponse(
-            status_code=200,
-            content={
-                "status": {
-                    "code": 200,
-                    "message": "Success"
-                },
-                "data": {
-                    "current_price": {
-                        "date": df['Tanggal'].iloc[-1].strftime("%Y-%m-%d"),
-                        "price": float(df['Terakhir'].iloc[-1])
-                    },
-                    "historical_data": df.tail(7)[['Tanggal', 'Terakhir']].apply(
-                        lambda x: {
-                            'date': x['Tanggal'].strftime("%Y-%m-%d"), 
-                            'price': float(x['Terakhir'])
-                        }, 
-                        axis=1
-                    ).tolist(),
-                    "predictions": prediction_results,
-                    "prediction_summary": {
-                        "total_days": 30,
-                        "start_date": future_dates[0].strftime("%Y-%m-%d"),
-                        "end_date": future_dates[-1].strftime("%Y-%m-%d"),
-                        "lowest_price": round(float(min(predictions.flatten())), 2),
-                        "highest_price": round(float(max(predictions.flatten())), 2),
-                        "average_price": round(float(np.mean(predictions.flatten())), 2)
-                    }
-                }
-            }
-        )
+        # Return results
+        return JSONResponse(content={
+            "last_known_price": float(df['Terakhir'].iloc[-1]),
+            "last_known_date": df['Tanggal'].iloc[-1].strftime("%Y-%m-%d"),
+            "predictions": prediction_results,
+            "historical_data": df.tail(5)[['Tanggal', 'Terakhir']].apply(
+                lambda x: {'tanggal': x['Tanggal'].strftime("%Y-%m-%d"), 'harga': float(x['Terakhir'])}, 
+                axis=1
+            ).tolist()
+        })
         
     except Exception as e:
-        return JSONResponse(
-            status_code=500,
-            content={
-                "status": {
-                    "code": 500,
-                    "message": f"Internal server error: {str(e)}"
-                },
-                "data": None
-            }
-        )
+        raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
