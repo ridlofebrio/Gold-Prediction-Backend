@@ -2,7 +2,7 @@ from fastapi import FastAPI, Query
 from fastapi.responses import JSONResponse
 import pandas as pd
 from app.routers import predict
-from app.schedulers.data_updater import get_gold_price_history
+from app.schedulers.data_updater import get_gold_price_history, should_update
 from fastapi.middleware.cors import CORSMiddleware
 import asyncio
 import threading
@@ -32,8 +32,9 @@ def periodic_update():
 # Event handler saat aplikasi startup
 @app.on_event("startup")
 async def startup_event():
-    # Jalankan update pertama
-    get_gold_price_history()
+    # Cek apakah perlu update saat startup
+    if should_update():
+        get_gold_price_history()
     
     # Jalankan update periodik dalam thread terpisah
     update_thread = threading.Thread(target=periodic_update, daemon=True)

@@ -2,6 +2,7 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
+import time
 
 def get_gold_price_history():
     try:
@@ -56,3 +57,19 @@ def get_gold_price_history():
     except Exception as e:
         print(f"Error mengambil data harga emas: {str(e)}")
         return False
+
+def should_update():
+    """Cek apakah sekarang waktunya untuk update (jam 19:00)"""
+    now = datetime.now()
+    return now.hour == 19 and now.minute == 0
+
+def periodic_update():
+    while True:
+        if should_update():
+            success = get_gold_price_history()
+            if success:
+                print(f"Data berhasil diupdate pada {datetime.now()}")
+            else:
+                print(f"Gagal mengupdate data pada {datetime.now()}")
+        # Tunggu 60 detik sebelum pengecekan berikutnya
+        time.sleep(60)
