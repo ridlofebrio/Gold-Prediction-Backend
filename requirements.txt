@@ -5,3 +5,5 @@ python-multipart==0.0.9
 scikit-learn==1.4.0
 tensorflow==2.15.0
 numpy==1.26.0
+yfinance==0.2.36
+schedule==1.2.1
