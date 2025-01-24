@@ -8,7 +8,7 @@ def get_gold_price_history():
     try:
         # Dapatkan tanggal hari ini dan 4 bulan yang lalu
         end_date = datetime.now()
-        start_date = end_date - timedelta(days=120)
+        start_date = end_date - timedelta(days=365)
         
         # Download data harga emas menggunakan yfinance
         gold = yf.download("GC=F", start=start_date, end=end_date)
@@ -51,7 +51,7 @@ def get_gold_price_history():
         gold = gold[['Tanggal', 'Terakhir', 'Pembukaan', 'Tertinggi', 'Terendah', 'Vol.', 'Perubahan%']]
         
         # Simpan ke CSV
-        gold.to_csv('Database/DataTrain.csv', index=False, quoting=1)
+        gold.to_csv('CSV/DataTrain.csv', index=False, quoting=1)
         return True
         
     except Exception as e:

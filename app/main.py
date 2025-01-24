@@ -40,7 +40,7 @@ async def startup_event():
     update_thread = threading.Thread(target=periodic_update, daemon=True)
     update_thread.start()
 
-csv_file_path = "Database/Data 20 tahun.csv"
+csv_file_path = "CSV/DataTrain.csv"
 data = pd.read_csv(csv_file_path)
 
 # Mengganti NaN dengan None agar JSON compliant
