@@ -28,7 +28,7 @@ app.include_router(sma.router)
 def periodic_update():
     while True:
         get_gold_price_history()
-        # Tunggu 1 jam sebelum update berikutnya
+        get_historical_gold_data()
         time.sleep(3600)
 
 # Event handler saat aplikasi startup
