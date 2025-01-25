@@ -2,7 +2,8 @@ from fastapi import FastAPI, Query
 from fastapi.responses import JSONResponse
 import pandas as pd
 from app.routers import predict
-from app.schedulers.data_updater import get_gold_price_history, should_update
+from app.routers import sma
+from app.schedulers.data_updater import get_gold_price_history, should_update, get_historical_gold_data
 from fastapi.middleware.cors import CORSMiddleware
 import asyncio
 import threading
@@ -21,6 +22,7 @@ app.add_middleware(
 
 # Include predict router
 app.include_router(predict.router)
+app.include_router(sma.router)
 
 # Fungsi untuk menjalankan update data secara periodik
 def periodic_update():
@@ -35,6 +37,7 @@ async def startup_event():
     # Cek apakah perlu update saat startup
     if should_update():
         get_gold_price_history()
+        get_historical_gold_data()
     
     # Jalankan update periodik dalam thread terpisah
     update_thread = threading.Thread(target=periodic_update, daemon=True)

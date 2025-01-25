@@ -57,9 +57,25 @@ def predict_next_n_days(model, last_sequence, scaler, n_days=180):
     predictions_array = np.array(predictions).reshape(-1, 1)
     return scaler.inverse_transform(predictions_array)
 
-@router.get("/predict")
-async def predict_price():
+@router.get("/predict/{duration}")
+async def predict_price(duration: str):
     try:
+        # Tentukan jumlah hari berdasarkan parameter duration
+        duration_mapping = {
+            "week": 7,        # 1 minggu
+            "month": 30,      # 1 bulan
+            "quarter": 90,    # 3 bulan
+            "semester": 180   # 6 bulan
+        }
+        
+        if duration not in duration_mapping:
+            raise HTTPException(
+                status_code=400,
+                detail="Durasi tidak valid. Pilihan yang tersedia: week, month, quarter, semester"
+            )
+            
+        n_days = duration_mapping[duration]
+        
         # Read and preprocess the file
         df = prepare_data()
         
@@ -74,18 +90,18 @@ async def predict_price():
         if len(scaled_data) < window_size:
             raise HTTPException(
                 status_code=400,
-                detail=f"Not enough data to form a sequence of size {window_size}. Dataset size: {len(scaled_data)}."
+                detail=f"Data tidak cukup untuk membentuk sequence ukuran {window_size}. Ukuran dataset: {len(scaled_data)}."
             )
         
         # Prepare the last sequence for prediction
         last_sequence = scaled_data[-window_size:]
         
-        # Generate predictions for the next 180 days (6 months)
-        predictions = predict_next_n_days(model, last_sequence, scaler, n_days=180)
+        # Generate predictions
+        predictions = predict_next_n_days(model, last_sequence, scaler, n_days=n_days)
         
         # Create dates for the predictions
         last_date = df['Tanggal'].iloc[-1]
-        future_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=180, freq='D')
+        future_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=n_days, freq='D')
         
         # Create prediction results
         prediction_results = []
@@ -99,40 +115,26 @@ async def predict_price():
         pred_df = pd.DataFrame(prediction_results)
         pred_df['prediksi_harga'] = pred_df['prediksi_harga'].astype(float)
         
-        # Calculate prediction summaries
-        def get_summary(data):
-            return {
-                "lowest_price": round(float(data['prediksi_harga'].min()), 2),
-                "highest_price": round(float(data['prediksi_harga'].max()), 2),
-                "average_price": round(float(data['prediksi_harga'].mean()), 2)
-            }
-        
-        # Calculate summaries for different periods
-        first_week = pred_df.iloc[:7]
-        first_month = pred_df.iloc[:30]
-        first_3_months = pred_df.iloc[:90]
-        
+        # Calculate prediction summary
         prediction_summary = {
-            "total_days": len(pred_df),
-            "start_date": pred_df['tanggal'].iloc[0],
-            "end_date": pred_df['tanggal'].iloc[-1],
-            "first_week": get_summary(first_week),
-            "first_month": get_summary(first_month),
-            "first_3_months": get_summary(first_3_months),
-            "overall": get_summary(pred_df)
+            "total_hari": len(pred_df),
+            "tanggal_mulai": pred_df['tanggal'].iloc[0],
+            "tanggal_akhir": pred_df['tanggal'].iloc[-1],
+            "harga_terendah": round(float(pred_df['prediksi_harga'].min()), 2),
+            "harga_tertinggi": round(float(pred_df['prediksi_harga'].max()), 2),
+            "harga_rata_rata": round(float(pred_df['prediksi_harga'].mean()), 2)
         }
         
-        # Return results
         return JSONResponse(content={
-            "last_known_price": float(df['Terakhir'].iloc[-1]),
-            "last_known_date": df['Tanggal'].iloc[-1].strftime("%Y-%m-%d"),
-            "predictions": prediction_results,
-            "prediction_summary": prediction_summary,
-            "historical_data": df.tail(5)[['Tanggal', 'Terakhir']].apply(
+            "harga_terakhir": float(df['Terakhir'].iloc[-1]),
+            "tanggal_terakhir": df['Tanggal'].iloc[-1].strftime("%Y-%m-%d"),
+            "prediksi": prediction_results,
+            "ringkasan_prediksi": prediction_summary,
+            "data_historis": df.tail(5)[['Tanggal', 'Terakhir']].apply(
                 lambda x: {'tanggal': x['Tanggal'].strftime("%Y-%m-%d"), 'harga': float(x['Terakhir'])}, 
                 axis=1
             ).tolist()
         })
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Terjadi kesalahan: {str(e)}")
