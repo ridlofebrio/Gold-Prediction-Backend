@@ -8,7 +8,7 @@ def get_gold_price_history():
     try:
         # Dapatkan tanggal hari ini dan 4 bulan yang lalu
         end_date = datetime.now()
-        start_date = end_date - timedelta(days=365)
+        start_date = end_date - timedelta(days=120)  # 4 bulan (30 hari x 4)
         
         # Download data harga emas menggunakan yfinance
         gold = yf.download("GC=F", start=start_date, end=end_date)
