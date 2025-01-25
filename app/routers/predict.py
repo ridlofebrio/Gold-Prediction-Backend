@@ -3,7 +3,7 @@ import logging
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 logging.getLogger('tensorflow').setLevel(logging.ERROR)
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
 from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.models import load_model
@@ -57,84 +57,110 @@ def predict_next_n_days(model, last_sequence, scaler, n_days=180):
     predictions_array = np.array(predictions).reshape(-1, 1)
     return scaler.inverse_transform(predictions_array)
 
-@router.get("/predict/{duration}")
-async def predict_price(duration: str):
+@router.get("/predict/cagr")
+async def predict_cagr(range: str = Query(..., description="Rentang waktu (contoh: 1w, 1m, 3m, 6m)")):
     try:
-        # Tentukan jumlah hari berdasarkan parameter duration
+        # Perbaikan nama variabel untuk konsistensi
+        duration = range  # menggunakan nama yang sama dengan parameter query
+        
+        # Pemetaan durasi dengan deskripsi yang lebih jelas
         duration_mapping = {
-            "week": 7,        # 1 minggu
-            "month": 30,      # 1 bulan
-            "quarter": 90,    # 3 bulan
-            "semester": 180   # 6 bulan
+            "1w": {"days": 7, "desc": "1 minggu"},
+            "1m": {"days": 30, "desc": "1 bulan"},
+            "3m": {"days": 90, "desc": "3 bulan"},
+            "6m": {"days": 180, "desc": "6 bulan"}
         }
         
         if duration not in duration_mapping:
+            valid_durations = ", ".join(duration_mapping.keys())
             raise HTTPException(
                 status_code=400,
-                detail="Durasi tidak valid. Pilihan yang tersedia: week, month, quarter, semester"
+                detail=f"Durasi tidak valid. Pilihan yang tersedia: {valid_durations}"
             )
             
-        n_days = duration_mapping[duration]
+        n_days = duration_mapping[duration]["days"]
         
-        # Read and preprocess the file
+        # Baca dan preprocessing data
         df = prepare_data()
-        
-        # Scale the data
-        scaler = MinMaxScaler()
-        scaled_data = scaler.fit_transform(df['Terakhir'].values.reshape(-1, 1))
-        
-        # Get window size from model
-        window_size = model.input_shape[1]
-        
-        # Check if dataset is large enough
-        if len(scaled_data) < window_size:
+        if df.empty:
             raise HTTPException(
-                status_code=400,
-                detail=f"Data tidak cukup untuk membentuk sequence ukuran {window_size}. Ukuran dataset: {len(scaled_data)}."
+                status_code=404,
+                detail="Data tidak ditemukan"
             )
         
-        # Prepare the last sequence for prediction
-        last_sequence = scaled_data[-window_size:]
-        
-        # Generate predictions
-        predictions = predict_next_n_days(model, last_sequence, scaler, n_days=n_days)
-        
-        # Create dates for the predictions
-        last_date = df['Tanggal'].iloc[-1]
-        future_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=n_days, freq='D')
-        
-        # Create prediction results
-        prediction_results = []
-        for date, price in zip(future_dates, predictions.flatten()):
-            prediction_results.append({
-                "tanggal": date.strftime("%Y-%m-%d"),
-                "prediksi_harga": round(float(price), 2)
+        # Validasi data
+        if len(df) < 2:  # minimal butuh 2 data untuk scaling
+            raise HTTPException(
+                status_code=400,
+                detail="Data terlalu sedikit untuk melakukan prediksi"
+            )
+            
+        try:
+            # Scale data
+            scaler = MinMaxScaler(feature_range=(0, 1))
+            scaled_data = scaler.fit_transform(df['Terakhir'].values.reshape(-1, 1))
+            
+            # Validasi window size
+            window_size = model.input_shape[1]
+            if len(scaled_data) < window_size:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Data tidak cukup untuk membentuk sequence ukuran {window_size}"
+                )
+            
+            # Prepare sequence dan generate prediksi
+            last_sequence = scaled_data[-window_size:]
+            predictions = predict_next_n_days(model, last_sequence, scaler, n_days=n_days)
+            
+            # Generate tanggal prediksi
+            last_date = df['Tanggal'].iloc[-1]
+            future_dates = pd.date_range(
+                start=last_date + pd.Timedelta(days=1), 
+                periods=n_days, 
+                freq='D'
+            )
+            
+            # Buat hasil prediksi
+            prediction_results = [
+                {
+                    "tanggal": date.strftime("%Y-%m-%d"),
+                    "prediksi_harga": round(float(price), 2)
+                }
+                for date, price in zip(future_dates, predictions.flatten())
+            ]
+            
+            # Konversi ke DataFrame untuk analisis
+            pred_df = pd.DataFrame(prediction_results)
+            pred_df['prediksi_harga'] = pred_df['prediksi_harga'].astype(float)
+            
+            # Hitung ringkasan prediksi
+            prediction_summary = {
+                "total_hari": len(pred_df),
+                "tanggal_mulai": pred_df['tanggal'].iloc[0],
+                "tanggal_akhir": pred_df['tanggal'].iloc[-1],
+                "harga_terendah": round(float(pred_df['prediksi_harga'].min()), 2),
+                "harga_tertinggi": round(float(pred_df['prediksi_harga'].max()), 2),
+                "harga_rata_rata": round(float(pred_df['prediksi_harga'].mean()), 2)
+            }
+            
+            # Return hasil yang sama seperti sebelumnya
+            return JSONResponse(content={
+                "harga_terakhir": float(df['Terakhir'].iloc[-1]),
+                "tanggal_terakhir": df['Tanggal'].iloc[-1].strftime("%Y-%m-%d"),
+                "prediksi": prediction_results,
+                "ringkasan_prediksi": prediction_summary
             })
-        
-        # Convert predictions to DataFrame for easier analysis
-        pred_df = pd.DataFrame(prediction_results)
-        pred_df['prediksi_harga'] = pred_df['prediksi_harga'].astype(float)
-        
-        # Calculate prediction summary
-        prediction_summary = {
-            "total_hari": len(pred_df),
-            "tanggal_mulai": pred_df['tanggal'].iloc[0],
-            "tanggal_akhir": pred_df['tanggal'].iloc[-1],
-            "harga_terendah": round(float(pred_df['prediksi_harga'].min()), 2),
-            "harga_tertinggi": round(float(pred_df['prediksi_harga'].max()), 2),
-            "harga_rata_rata": round(float(pred_df['prediksi_harga'].mean()), 2)
-        }
-        
-        return JSONResponse(content={
-            "harga_terakhir": float(df['Terakhir'].iloc[-1]),
-            "tanggal_terakhir": df['Tanggal'].iloc[-1].strftime("%Y-%m-%d"),
-            "prediksi": prediction_results,
-            "ringkasan_prediksi": prediction_summary,
-            "data_historis": df.tail(5)[['Tanggal', 'Terakhir']].apply(
-                lambda x: {'tanggal': x['Tanggal'].strftime("%Y-%m-%d"), 'harga': float(x['Terakhir'])}, 
-                axis=1
-            ).tolist()
-        })
-        
+            
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Gagal melakukan prediksi: {str(e)}"
+            )
+            
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Terjadi kesalahan: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Terjadi kesalahan sistem: {str(e)}"
+        )

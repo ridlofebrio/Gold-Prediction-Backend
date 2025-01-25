@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
 import pandas as pd
 import numpy as np
@@ -8,9 +8,26 @@ router = APIRouter()
 def hitung_sma(data, periode):
     return data.rolling(window=periode).mean()
 
-@router.get("/sma/{periode}")
-async def get_sma(periode: int):
+@router.get("/predict/moving-average")
+async def sma(range: str = Query(..., description="Rentang waktu (contoh: 1w, 1m, 3m, 6m)")):
     try:
+        # Pemetaan durasi ke periode SMA
+        duration_mapping = {
+            "1w": {"days": 7, "periode": 7},
+            "1m": {"days": 30, "periode": 30},
+            "3m": {"days": 90, "periode": 90},
+            "6m": {"days": 180, "periode": 180}
+        }
+        
+        if range not in duration_mapping:
+            valid_durations = ", ".join(duration_mapping.keys())
+            raise HTTPException(
+                status_code=400,
+                detail=f"Durasi tidak valid. Pilihan yang tersedia: {valid_durations}"
+            )
+        
+        periode = duration_mapping[range]["periode"]
+        
         # Baca data dari CSV yang sama
         df = pd.read_csv("CSV/Data 20 tahun.csv")
         
