@@ -33,59 +33,59 @@ async def sma(range: str = Query(..., description="Rentang waktu (contoh: 1w, 1m
             "4y": {"days": 1460},
             "5y": {"days": 1825}
         }
-        
+
         if range not in duration_mapping:
             valid_durations = ", ".join(duration_mapping.keys())
             raise HTTPException(
                 status_code=400,
                 detail=f"Durasi tidak valid. Pilihan yang tersedia: {valid_durations}"
             )
-        
+
         days_to_show = duration_mapping[range]["days"]
-        
+
         # Baca data dari CSV
         df = pd.read_csv("CSV/Data 20 tahun.csv")
-        
+
         # Konversi format harga
         df['Terakhir'] = df['Terakhir'].str.replace('.', '', regex=False)
         df['Terakhir'] = df['Terakhir'].str.replace(',', '.', regex=False)
         df['Terakhir'] = pd.to_numeric(df['Terakhir'], errors='coerce')
-        
+
         # Konversi tanggal
         df['Tanggal'] = pd.to_datetime(df['Tanggal'], format='%d/%m/%Y')
         df = df.sort_values('Tanggal')
-        
+
         # Hitung SMA dengan periode tetap 20 hari
         sma = hitung_sma(df['Terakhir'])
-        
+
         # Ambil data sesuai rentang waktu yang diminta
         df = df.tail(days_to_show)
         sma = sma.tail(days_to_show)
-        
+
         # Siapkan hasil
         hasil = []
         for tanggal, harga, nilai_sma in zip(df['Tanggal'], df['Terakhir'], sma):
             if pd.notna(nilai_sma):  # Hanya masukkan data yang tidak NaN
                 hasil.append({
-                    "tanggal": tanggal.strftime("%Y-%m-%d"),
-                    "harga": round(float(harga), 2),
+                    "date": tanggal.strftime("%Y-%m-%d"),
+                    "price": round(float(harga), 2),
                     "sma": round(float(nilai_sma), 2)
                 })
-        
+
         # Hitung statistik
         statistik = {
-            "periode_sma": 20,  # periode tetap 20 hari
-            "rentang_waktu": f"{days_to_show} hari",
-            "rata_rata_sma": round(float(sma.mean()), 2),
-            "sma_terakhir": round(float(sma.iloc[-1]), 2),
-            "total_data": len(hasil)
+            "sma_period": 20,  # periode tetap 20 hari
+            "time_range": f"{days_to_show} hari",
+            "average_sma": round(float(sma.mean()), 2),
+            "last_sma": round(float(sma.iloc[-1]), 2),
+            "total_records": len(hasil)
         }
-        
+
         return JSONResponse(content={
             "status": "success",
-            "statistik": statistik,
+            "statistics": statistik,
             "data": hasil
         })
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Terjadi kesalahan: {str(e)}")
