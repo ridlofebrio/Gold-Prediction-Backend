@@ -72,12 +72,14 @@ async def sma(range: str = Query(..., description="Rentang waktu (contoh: 1w, 1m
                     "sma": round(float(nilai_sma), 2)
                 })
 
-        # Hitung statistik
+        # Bersihkan nilai NaN sebelum perhitungan statistik
+        sma_clean = sma.dropna()
+
         statistik = {
-            "sma_period": 20,  # periode tetap 20 hari
+            "sma_period": 20,
             "time_range": f"{days_to_show} hari",
-            "average_sma": round(float(sma.mean()), 2),
-            "last_sma": round(float(sma.iloc[-1]), 2),
+            "average_sma": round(float(sma_clean.mean()), 2),
+            "last_sma": round(float(sma_clean.iloc[-1]), 2),
             "total_records": len(hasil)
         }
 
