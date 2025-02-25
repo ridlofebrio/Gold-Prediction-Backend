@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse
 import pandas as pd
 from app.routers import predict
 from app.routers import sma
+from app.routers import vecm
 from app.schedulers.data_updater import get_gold_price_history, should_update, get_historical_gold_data
 from fastapi.middleware.cors import CORSMiddleware
 import asyncio
@@ -21,8 +22,9 @@ app.add_middleware(
 )
 
 # Include predict router
-app.include_router(predict.router)
+# app.include_router(predict.router)
 app.include_router(sma.router)
+app.include_router(vecm.router)
 
 # Fungsi untuk menjalankan update data secara periodik
 def periodic_update():
