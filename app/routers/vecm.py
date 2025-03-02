@@ -21,20 +21,45 @@ with open(MODEL_PATH, "rb") as model_file:
 
 # Load and preprocess data
 def preprocess_data():
-    CSV_FILE_PATH = os.path.join("CSV", "Data Historis Program ML Forecasting Emas(1).csv")
-    df = pd.read_csv(CSV_FILE_PATH)
-    df['Tanggal'] = pd.to_datetime(df['Tanggal'], format='%d/%m/%Y', errors='coerce')
-    df = df.dropna(subset=['Tanggal'])
-    df = df.sort_values(by='Tanggal')
-    
-    for col in ['Emas', 'Dollar', 'Minyak Dunia']:
-        df[col] = df[col].astype(str).str.replace('.', '', regex=False)
-        df[col] = df[col].str.replace(',', '.', regex=False)
-        df[col] = pd.to_numeric(df[col], errors='coerce')
-    
-    df.dropna(inplace=True)
-    df.set_index('Tanggal', inplace=True)
-    return df
+    try:
+        # Coba load data dari DataTrain.csv terlebih dahulu
+        CSV_FILE_PATH = os.path.join("CSV", "DataTrain.csv")
+        df = pd.read_csv(CSV_FILE_PATH)
+        
+        # Ubah format tanggal dan konversi kolom Terakhir
+        df['Tanggal'] = pd.to_datetime(df['Tanggal'], format='%d/%m/%Y', errors='coerce')
+        df = df.dropna(subset=['Tanggal'])
+        df = df.sort_values(by='Tanggal')
+        
+        # Konversi harga emas dari string ke float
+        df['Terakhir'] = df['Terakhir'].astype(str).str.replace('.', '', regex=False)
+        df['Terakhir'] = df['Terakhir'].str.replace(',', '.', regex=False)
+        df['Terakhir'] = pd.to_numeric(df['Terakhir'], errors='coerce')
+        
+        # Drop baris yang tidak memiliki harga yang valid
+        df = df.dropna(subset=['Terakhir'])
+        
+        # Set Tanggal sebagai indeks
+        df.set_index('Tanggal', inplace=True)
+        
+        return df
+    except Exception as e:
+        # Jika gagal, gunakan data historis alternatif
+        print(f"Error loading DataTrain.csv: {str(e)}. Using historical data instead.")
+        CSV_FILE_PATH = os.path.join("CSV", "Data Historis Program ML Forecasting Emas(1).csv")
+        df = pd.read_csv(CSV_FILE_PATH)
+        df['Tanggal'] = pd.to_datetime(df['Tanggal'], format='%d/%m/%Y', errors='coerce')
+        df = df.dropna(subset=['Tanggal'])
+        df = df.sort_values(by='Tanggal')
+        
+        for col in ['Emas', 'Dollar', 'Minyak Dunia']:
+            df[col] = df[col].astype(str).str.replace('.', '', regex=False)
+            df[col] = df[col].str.replace(',', '.', regex=False)
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+        
+        df.dropna(inplace=True)
+        df.set_index('Tanggal', inplace=True)
+        return df
 
 # FastAPI app
 app = FastAPI()
@@ -67,8 +92,16 @@ async def predict_cagr(range: str = Query(..., description="Rentang waktu (conto
         if len(df) < vecm_model.k_ar:
             raise HTTPException(status_code=400, detail="Data historis tidak cukup untuk melakukan prediksi")
 
-        # Get current gold price and date
-        current_price = float(df['Emas'].iloc[-1])
+        # Get current gold price and date - use 'Terakhir' column if available
+        if 'Terakhir' in df.columns:
+            current_price = float(df['Terakhir'].iloc[-1])
+            # Use the most recent data for prediction
+            input_data = df[['Terakhir']].tail(vecm_model.k_ar).values
+        else:
+            current_price = float(df['Emas'].iloc[-1])
+            # Use the most recent data for prediction
+            input_data = df[['Emas']].tail(vecm_model.k_ar).values
+            
         current_date = df.index[-1]
 
         # Generate predictions
