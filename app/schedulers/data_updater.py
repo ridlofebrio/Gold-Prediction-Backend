@@ -10,27 +10,52 @@ def get_gold_price_history():
         end_date = datetime.now()
         start_date = end_date - timedelta(days=120)  # 4 bulan (30 hari x 4)
         
-        # Download data harga emas menggunakan yfinance
-        gold = yf.download("GC=F", start=start_date, end=end_date)
-        
-        # Format data
-        gold = gold.reset_index()
-        gold['Date'] = gold['Date'].dt.strftime('%d/%m/%Y')
-        
-        # Hitung persentase perubahan terlebih dahulu
-        pct_change = (gold['Close'].pct_change() * 100).round(2)
-        
-        # Format angka dengan koma sebagai pemisah desimal
-        def format_number(value):
-            return '{:,.2f}'.format(value).replace(',', 'X').replace('.', ',').replace('X', '.')
-        
-        # Konversi kolom numerik menggunakan numpy vectorize
-        format_vec = np.vectorize(format_number)
-        gold['Close'] = format_vec(gold['Close'].values)
-        gold['Open'] = format_vec(gold['Open'].values)
-        gold['High'] = format_vec(gold['High'].values)
-        gold['Low'] = format_vec(gold['Low'].values)
-        
+        # Tambahkan mekanisme retry dengan delay
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                # Download data harga emas menggunakan yfinance
+                gold = yf.download("GC=F", start=start_date, end=end_date)
+                
+                # Verifikasi bahwa data tidak kosong
+                if gold.empty:
+                    print(f"Attempt {attempt+1}: Data kosong, menunggu sebelum mencoba kembali...")
+                    if attempt < max_retries - 1:
+                        time.sleep(60 * (attempt + 1))  # Tunggu lebih lama setiap percobaan
+                        continue
+                    else:
+                        raise ValueError("Data kosong setelah beberapa percobaan")
+                
+                # Format data
+                gold = gold.reset_index()
+                gold['Date'] = gold['Date'].dt.strftime('%d/%m/%Y')
+                
+                # Hitung persentase perubahan terlebih dahulu
+                pct_change = (gold['Close'].pct_change() * 100).round(2)
+                
+                # Format angka dengan koma sebagai pemisah desimal
+                def format_number(value):
+                    return '{:,.2f}'.format(value).replace(',', 'X').replace('.', ',').replace('X', '.')
+                
+                # Konversi kolom numerik menggunakan numpy vectorize
+                # Tambahkan parameter otypes untuk menangani kasus input kosong
+                format_vec = np.vectorize(format_number, otypes=[str])
+                gold['Close'] = format_vec(gold['Close'].values)
+                gold['Open'] = format_vec(gold['Open'].values)
+                gold['High'] = format_vec(gold['High'].values)
+                gold['Low'] = format_vec(gold['Low'].values)
+                
+                # Kode selanjutnya tetap sama...
+                
+                break  # Keluar dari loop jika berhasil
+                
+            except Exception as download_error:
+                print(f"Attempt {attempt+1} failed: {str(download_error)}")
+                if attempt < max_retries - 1:
+                    time.sleep(60 * (attempt + 1))  # Tunggu lebih lama setiap percobaan
+                else:
+                    raise  # Re-raise error jika semua percobaan gagal
+                
         # Rename kolom
         gold = gold.rename(columns={
             'Date': 'Tanggal',
